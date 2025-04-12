@@ -28,36 +28,25 @@ func (h *DramaHandler) GetDramas(c *gin.Context) {
 // Жаңа драма қосу
 func (h *DramaHandler) CreateDrama(c *gin.Context) {
 	var input struct {
-		Title  string `json:"title"`
-		Genres []int  `json:"genres"` // Принимаем ID жанров
+		Title  string `json:"title" binding:"required"`
+		Genres []int  `json:"genres"`
 	}
-
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 1️⃣ Найдём жанры по их ID
+	// жанрларды алу
 	var genres []models.Genre
-	if len(input.Genres) > 0 { // Проверяем, есть ли жанры в запросе
-		if err := h.db.Where("id IN ?", input.Genres).Find(&genres).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Genres not found"})
-			return
-		}
-	}
+	h.db.Where("id IN ?", input.Genres).Find(&genres)
 
-	// 2️⃣ Создаём драму с найденными жанрами
 	drama := models.Drama{
 		Title:  input.Title,
-		Genres: genres, // Присваиваем найденные жанры
+		Genres: genres,
 	}
-
-	// 3️⃣ Сохраняем драму в базе
 	if err := h.db.Create(&drama).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusCreated, drama)
 }
 

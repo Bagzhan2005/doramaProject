@@ -3,26 +3,32 @@ package main
 import (
 	"doramaPro/database"
 	"doramaPro/handlers"
+	"doramaPro/middleware"
 	"github.com/gin-gonic/gin"
-	"log"
 )
 
 func main() {
 	db, err := database.InitDB()
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
-	router := gin.Default()
-	dramaHandler := handlers.NewDramaHandler(db)
+	r := gin.Default()
 
-	api := router.Group("/api")
+	auth := handlers.NewAuthHandler(db)
+	drama := handlers.NewDramaHandler(db)
+
+	api := r.Group("/api")
 	{
-		api.GET("/dramas", dramaHandler.GetDramas)
-		api.POST("/dramas", dramaHandler.CreateDrama)
-		api.PUT("/dramas/:id", dramaHandler.UpdateDrama)
-		api.DELETE("/dramas/:id", dramaHandler.DeleteDrama)
+		api.POST("/register", auth.Register)
+		api.POST("/login", auth.Login)
+
+		api.GET("/dramas", drama.GetDramas)
+
+		admin := api.Group("/admin")
+		admin.Use(middleware.AuthMiddleware(), middleware.AdminOnly())
+		admin.POST("/dramas", drama.CreateDrama)
 	}
 
-	router.Run(":8080")
+	r.Run(":8080")
 }
