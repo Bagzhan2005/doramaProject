@@ -2,79 +2,117 @@ package handlers
 
 import (
 	"doramaPro/models"
+	"doramaPro/services"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"net/http"
+	"strconv"
 )
 
 type DramaHandler struct {
-	db *gorm.DB
+	service *services.DramaService
 }
 
-func NewDramaHandler(db *gorm.DB) *DramaHandler {
-	return &DramaHandler{db: db}
+func NewDramaHandler(service *services.DramaService) *DramaHandler {
+	return &DramaHandler{service: service}
 }
 
-// Барлық драмаларды алу
 func (h *DramaHandler) GetDramas(c *gin.Context) {
-	var dramas []models.Drama
-	if err := h.db.Preload("Genres").Find(&dramas).Error; err != nil {
+	dramas, err := h.service.GetAllDramas()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, dramas)
 }
 
-// Жаңа драма қосу
 func (h *DramaHandler) CreateDrama(c *gin.Context) {
 	var input struct {
-		Title  string `json:"title" binding:"required"`
-		Genres []int  `json:"genres"`
+		Title         string  `json:"title" binding:"required"`
+		OriginalTitle string  `json:"original_title"`
+		Country       string  `json:"country"`
+		ReleaseYear   int     `json:"release_year"`
+		Episodes      int     `json:"episodes"`
+		Status        string  `json:"status"`
+		Description   string  `json:"description"`
+		Rating        float64 `json:"rating"`
+		Genres        []int   `json:"genres"` // Массив ID жанров
 	}
+
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// жанрларды алу
-	var genres []models.Genre
-	h.db.Where("id IN ?", input.Genres).Find(&genres)
 
-	drama := models.Drama{
-		Title:  input.Title,
-		Genres: genres,
-	}
-	if err := h.db.Create(&drama).Error; err != nil {
+	drama, err := h.service.CreateDrama(
+		input.Title,
+		input.OriginalTitle,
+		input.Country,
+		input.ReleaseYear,
+		input.Episodes,
+		input.Status,
+		input.Description,
+		input.Rating,
+		input.Genres,
+	)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusCreated, drama)
 }
 
-// Драманы жаңарту
 func (h *DramaHandler) UpdateDrama(c *gin.Context) {
 	id := c.Param("id")
-	var drama models.Drama
 
-	if err := h.db.First(&drama, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Drama not found"})
+	parsedID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID драмы"})
 		return
 	}
 
-	if err := c.ShouldBindJSON(&drama); err != nil {
+	var updatedDrama models.Drama
+	if err := c.ShouldBindJSON(&updatedDrama); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	h.db.Save(&drama)
+	// Преобразуем жанры в массив ID
+	genreIDs := updatedDrama.Genres // Теперь передаем массив ID жанров, а не самих жанров
+
+	var genres []models.Genre
+	// Получаем жанры по ID
+	err = h.service.GetGenresByIDs(genreIDs, &genres)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения жанров"})
+		return
+	}
+
+	updatedDrama.Genres = genres
+
+	drama, err := h.service.UpdateDrama(uint(parsedID), &updatedDrama)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Драма не найдена"})
+		return
+	}
+
 	c.JSON(http.StatusOK, drama)
 }
 
-// Драманы жою
 func (h *DramaHandler) DeleteDrama(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.db.Delete(&models.Drama{}, id).Error; err != nil {
+
+	parsedID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный ID драмы"})
+		return
+	}
+
+	err = h.service.DeleteDrama(uint(parsedID))
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.Status(http.StatusNoContent)
 }

@@ -20,7 +20,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var input struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
-		Role     string `json:"role"` // default: user
+		Role     string `json:"role"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
